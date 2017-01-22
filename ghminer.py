@@ -1,5 +1,6 @@
-from time import time, sleep
 import requests
+import sqlite3
+from time import time, sleep
 
 # The metadata keys we're interested in. See get_user().
 __KEEP = ('login', 'id', 'type', 'name', 'company', 'blog',
@@ -41,12 +42,38 @@ def get_user(username):
 
 
 def main():
-    start_id = 0  # TODO pick off from last id in case of crash
-    while start_id < 200:  # temporary limit
+    conn = sqlite3.connect('ghaccounts.sqlite3',
+        detect_types=sqlite3.PARSE_DECLTYPES)
+
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS accounts(
+        id INTEGER PRIMARY KEY,
+        login TEXT unique,
+        type TEXT,
+        name TEXT,
+        company TEXT,
+        blog TEXT,
+        location TEXT,
+        email TEXT,
+        hireable INTEGER,
+        public_repos INTEGER,
+        followers INTEGER,
+        following INTEGER,
+        created_at DATE,
+        updated_at DATE)
+    ''')
+
+    cursor = conn.execute('SELECT max(id) FROM accounts')
+    start_id = cursor.fetchone()[0]
+    while start_id < 25*10**6:
         usernames = get_usernames(start_id)
         for i, name in enumerate(usernames):
             u = get_user(name)
-            # TODO write to database
+            conn.execute("INSERT INTO accounts({}) values ({})".format(
+                ', '.join(__KEEP), ', '.join(['?']*len(__KEEP))),
+                [u[k] for k in __KEEP])
+            conn.commit()
+            print('done uid', u['id'])
             if i == len(usernames) - 1:
                 start_id = u['id']
 
