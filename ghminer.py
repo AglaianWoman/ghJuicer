@@ -1,8 +1,7 @@
+import click
 import requests
 import sqlite3
 from time import time, sleep
-
-# TODO replace magic numbers with command line args
 
 # The metadata keys we're interested in. See get_user().
 __KEEP = ('login', 'id', 'type', 'name', 'company', 'blog',
@@ -53,8 +52,11 @@ def get_user(username):
     return {k: data.get(k, None) for k in __KEEP}
 
 
-def main():
-    print('Connecting to database')
+@click.command()
+@click.option('-l', '--limit', default=25*10**6,
+    help='Program will stop upon reaching this specified account id number.')
+def main(limit):
+    print('[!] Connecting to database')
     conn = sqlite3.connect('ghaccounts.sqlite3', detect_types=sqlite3.PARSE_DECLTYPES)
 
     conn.execute('''
@@ -76,23 +78,30 @@ def main():
     ''')
 
     cursor = conn.execute('SELECT max(id) FROM accounts')
-    start_id = cursor.fetchone()[0] # 41448
-    while start_id < 25*10**6:
-        print('Retrieving usernames after id #{}'.format(start_id))
+    start_id = cursor.fetchone()[0]
+    print('[!] Last entry in database is account id #{}'.format(start_id))
+    print('[!] Program will extract metadata until id #{}'.format(limit))
+
+    while start_id < limit:
+        print('[!] Retrieving usernames after id #{}'.format(start_id))
         usernames = get_usernames(start_id)
         for i, name in enumerate(usernames):
+            '''Some accounts exist in /users listings, but /users/:username returns a 404
+            (possibly a deleted/banned account?).
+                Example: https://api.github.com/users?since=41448 shows user "readme",
+                but https://api.github.com/users/readme results in a 404.
+            '''
             try:
                 u = get_user(name)
             except GHMinerException as e:
-                '''Some accounts exist in /users listings, but /users/:username returns a 404
-                (possibly a deleted/banned account?).
-                    Example: https://api.github.com/users?since=41448 shows user "readme",
-                    but https://api.github.com/users/readme results in a 404.
-                '''
                 if e.err_code == 404:
                     print('[-] Skipped nonexistent account: {}'.format(e))
                     continue
                 raise
+
+            if u['id'] >= limit:
+                return
+
             conn.execute("INSERT INTO accounts({}) values ({})".format(
                 ', '.join(__KEEP), ', '.join(['?']*len(__KEEP))),
                 [u[k] for k in __KEEP])
@@ -100,6 +109,7 @@ def main():
             print('[+] metadata saved for account id #{}'.format(u['id']))
             if i == len(usernames) - 1:
                 start_id = u['id']
+    return
 
 if __name__ == '__main__':
-    main()
+    print(main())
