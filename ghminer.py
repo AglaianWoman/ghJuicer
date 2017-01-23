@@ -1,4 +1,3 @@
-import sys
 import requests
 import sqlite3
 from time import time, sleep
@@ -14,7 +13,14 @@ with open('oauthtk.txt', 'r') as f:
     __OAUTHTK = f.read()
 
 class GHMinerException(Exception):
-    pass
+    '''Custom exception class to report unexpected response error
+    codes during _req.'''
+    def __init__(self, url, err_code):
+        self.url = url
+        self.err_code = err_code
+
+    def __str__(self):
+        return '{} ({})'.format(self.url, self.err_code)
 
 
 def _req(url):
@@ -33,15 +39,8 @@ def _req(url):
         print('[-] Rate limit exceeded, sleeping for {} seconds ...'.format(wait_amt))
         sleep(wait_amt)
         return _req(url)
-    elif r.status_code == 404:
-        '''Some accounts exist in /users listings, but /users/:username returns a 404
-        (possibly a deleted/banned account?).
-            Example: https://api.github.com/users?since=41448 shows user "readme",
-            but https://api.github.com/users/readme results in a 404.
-        '''
-        raise GHMinerException('404: ' + url)
     else:
-        sys.exit('FATAL: (strange response) {} [{}]'.format(r.url, r.status_code))
+        raise GHMinerException(url, r.status_code)
 
 def get_usernames(since_id):
     '''Returns a list of 100 usernames starting from a since id.'''
@@ -49,8 +48,7 @@ def get_usernames(since_id):
     return [user.get('login', '') for user in data]
 
 def get_user(username):
-    '''Returns a dict containing an account's desired metadata.
-    Raises a GHMinerException from _req if the account w/ username is deleted/banned (404).'''
+    '''Returns a dict containing an account's desired metadata.'''
     data = _req('https://api.github.com/users/' + username)
     return {k: data.get(k, None) for k in __KEEP}
 
@@ -78,8 +76,7 @@ def main():
     ''')
 
     cursor = conn.execute('SELECT max(id) FROM accounts')
-    start_id = cursor.fetchone()[0]
-    start_id = 41448
+    start_id = cursor.fetchone()[0] # 41448
     while start_id < 25*10**6:
         print('Retrieving usernames after id #{}'.format(start_id))
         usernames = get_usernames(start_id)
@@ -87,8 +84,15 @@ def main():
             try:
                 u = get_user(name)
             except GHMinerException as e:
-                print('[-] {}'.format(e))
-                continue
+                '''Some accounts exist in /users listings, but /users/:username returns a 404
+                (possibly a deleted/banned account?).
+                    Example: https://api.github.com/users?since=41448 shows user "readme",
+                    but https://api.github.com/users/readme results in a 404.
+                '''
+                if e.err_code == 404:
+                    print('[-] Skipped nonexistent account: {}'.format(e))
+                    continue
+                raise
             conn.execute("INSERT INTO accounts({}) values ({})".format(
                 ', '.join(__KEEP), ', '.join(['?']*len(__KEEP))),
                 [u[k] for k in __KEEP])
