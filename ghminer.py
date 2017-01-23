@@ -1,6 +1,9 @@
+import sys
 import requests
 import sqlite3
 from time import time, sleep
+
+# TODO replace magic numbers with command line args
 
 # The metadata keys we're interested in. See get_user().
 __KEEP = ('login', 'id', 'type', 'name', 'company', 'blog',
@@ -9,6 +12,9 @@ __KEEP = ('login', 'id', 'type', 'name', 'company', 'blog',
 
 with open('oauthtk.txt', 'r') as f:
     __OAUTHTK = f.read()
+
+class GHMinerException(Exception):
+    pass
 
 
 def _req(url):
@@ -27,8 +33,15 @@ def _req(url):
         print('[-] Rate limit exceeded, sleeping for {} seconds ...'.format(wait_amt))
         sleep(wait_amt)
         return _req(url)
+    elif r.status_code == 404:
+        '''Some accounts exist in /users listings, but /users/:username returns a 404
+        (possibly a deleted/banned account?).
+            Example: https://api.github.com/users?since=41448 shows user "readme",
+            but https://api.github.com/users/readme results in a 404.
+        '''
+        raise GHMinerException('404: ' + url)
     else:
-        raise Exception('FATAL: (strange request) {} [{}]'.format(r.url, r.status_code))
+        sys.exit('FATAL: (strange response) {} [{}]'.format(r.url, r.status_code))
 
 def get_usernames(since_id):
     '''Returns a list of 100 usernames starting from a since id.'''
@@ -36,7 +49,8 @@ def get_usernames(since_id):
     return [user.get('login', '') for user in data]
 
 def get_user(username):
-    '''Returns a dict containing an account's desired metadata.'''
+    '''Returns a dict containing an account's desired metadata.
+    Raises a GHMinerException from _req if the account w/ username is deleted/banned (404).'''
     data = _req('https://api.github.com/users/' + username)
     return {k: data.get(k, None) for k in __KEEP}
 
@@ -65,11 +79,16 @@ def main():
 
     cursor = conn.execute('SELECT max(id) FROM accounts')
     start_id = cursor.fetchone()[0]
+    start_id = 41448
     while start_id < 25*10**6:
         print('Retrieving usernames after id #{}'.format(start_id))
         usernames = get_usernames(start_id)
         for i, name in enumerate(usernames):
-            u = get_user(name)
+            try:
+                u = get_user(name)
+            except GHMinerException as e:
+                print('[-] {}'.format(e))
+                continue
             conn.execute("INSERT INTO accounts({}) values ({})".format(
                 ', '.join(__KEEP), ', '.join(['?']*len(__KEEP))),
                 [u[k] for k in __KEEP])
