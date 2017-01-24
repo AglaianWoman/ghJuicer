@@ -3,7 +3,9 @@ import requests
 import sqlite3
 from time import time, sleep
 
-# The metadata keys we're interested in. See get_user().
+'''The metadata keys we're interested in- used in get_user() and SQL insert.
+These keys are GitHub API v3 compatible. See the JSON response
+for this example call: https://api.github.com/users/joshuarli'''
 __KEEP = ('login', 'id', 'type', 'name', 'company', 'blog',
     'location', 'email', 'hireable', 'public_repos', 'followers',
     'following', 'created_at', 'updated_at')
@@ -42,9 +44,11 @@ def _req(url):
         raise GHMinerException(url, r.status_code)
 
 def get_usernames(since_id):
-    '''Returns a list of 100 usernames starting from a since id.'''
+    '''Returns a list of 100 usernames starting from a since id.
+    A KeyError will stop the program if GitHub changes their API such that
+    account names are not contained under the key "login".'''
     data = _req('https://api.github.com/users?per_page=100&since=' + str(since_id))
-    return [user.get('login', '') for user in data]
+    return [user['login'] for user in data]
 
 def get_user(username):
     '''Returns a dict containing an account's desired metadata.'''
@@ -85,7 +89,7 @@ def main(limit):
     while start_id < limit:
         print('[!] Retrieving usernames after id #{}'.format(start_id))
         usernames = get_usernames(start_id)
-        for i, name in enumerate(usernames):
+        for i, name in enumerate(1, usernames):
             '''Some accounts exist in /users listings, but /users/:username returns a 404
             (possibly a deleted/banned account?).
                 Example: https://api.github.com/users?since=41448 shows user "readme",
@@ -107,9 +111,8 @@ def main(limit):
                 [u[k] for k in __KEEP])
             conn.commit()
             print('[+] metadata saved for account id #{}'.format(u['id']))
-            if i == len(usernames) - 1:
+            if i == len(usernames):
                 start_id = u['id']
-    return
 
 if __name__ == '__main__':
-    print(main())
+    main()
