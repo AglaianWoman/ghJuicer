@@ -1,5 +1,5 @@
-# ghMiner
-A tiny script that mines metadata on millions of Github accounts.
+# ghJuicer
+A tiny script that extracts metadata on millions of Github accounts.
 
 * Uses GitHub API v3!
 * Run once, then forget about it!
