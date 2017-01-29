@@ -89,7 +89,7 @@ def main(limit):
     while start_id < limit:
         print('[!] Retrieving usernames after id #{}'.format(start_id))
         usernames = get_usernames(start_id)
-        for i, name in enumerate(1, usernames):
+        for i, name in enumerate(usernames, 1):
             '''Some accounts exist in /users listings, but /users/:username returns a 404
             (possibly a deleted/banned account?).
                 Example: https://api.github.com/users?since=41448 shows user "readme",
