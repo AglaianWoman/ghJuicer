@@ -6,6 +6,12 @@ A tiny script that extracts metadata on millions of Github accounts.
 * Handles rate limits and internet connection errors without exiting.
 * If stopped manually and run again, it will pick off from where it last stopped according to the last database row.
 
-See my in-depth [blog post](https://joshuarli.github.io/ghminer-mining-metadata-on-millions-of-github-accounts.html) for a full walkthrough on the thought process and development of the script from start to finish.
+See my in-depth [blog post](https://joshuarli.github.io/2017/06/29/Extracting-metadata-on-millions-of-GitHub-accounts) for a full walkthrough on the thought process and development of the script from start to finish.
 
-Also, check [this](https://github.com/JoshuaRLi/GitHubLog) out!
+### Setup
+
+`pip3 install --user -r requirements.txt`
+
+### Usage
+
+`./ghminer.py`
